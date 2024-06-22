@@ -4,12 +4,17 @@ ArrayList<Obstacle> obstacles; // 障害物のリスト
 int initialZombie = 1;
 int initialSurviver = 100;
 float[] zombieSpeeds = {2}; // ゾンビの速度リスト
-float topSpeed=3;
-int seekRange=100;
+float topSpeed=7;
+float topForce=0.06;
+int seekRange=3000;
 
 // 追加したフィールド
 ArrayList<Boid> infectedBoids = new ArrayList<Boid>(); // 感染したボイドのリスト
-int infectionCooldown = 120; // 感染後の停止時間(フレーム数
+int infectionCooldown = 60; // 感染後の停止時間(フレーム数
+
+// グローバル変数として間隔パラメータを追加
+float obstacleSpacing = 200.0; // 障害物間の最低間隔
+
 
 class Boid {
   PVector position;
@@ -26,7 +31,7 @@ class Boid {
 
 
   // 初期設定用のパラメータ
-  float initialMaxForce = 0.1f;
+  float initialMaxForce = topForce;
 
   Boid(float x, float y, boolean isZombie, float speed) {
     acceleration = new PVector(0, 0);
@@ -100,41 +105,43 @@ class Boid {
     PVector desired = PVector.sub(target, position);
     desired.normalize();
     desired.mult(maxspeed);
+    if(isZombie){
+      float x=maxspeed/topSpeed;
+      float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
+      maxspeed=rogistic;
+//print(maxforce+"\n");
+    }
     PVector steer = PVector.sub(desired, velocity);
     steer.limit(maxforce);
     return steer;
   }
 
   void avoidObstacles(ArrayList<Obstacle> obstacles) {
-    for (Obstacle obstacle : obstacles) {
-      PVector steer = new PVector(0, 0);
-      PVector diff = PVector.sub(position, obstacle.position);
-      float d = diff.mag();
-      if (d < desiredSeparation + obstacle.size / 2) {
-        diff.normalize();
-        diff.div(d); // 障害物に近いほど強く反発
-        steer.add(diff);
-      }
-      steer.normalize();
-      steer.mult(maxspeed);
-      steer.limit(maxforce * 3);
-      applyForce(steer);
+  for (Obstacle obstacle : obstacles) {
+    PVector steer = new PVector(0, 0);
+    PVector diff = PVector.sub(position, obstacle.position);
+    float d = dist(position.x, position.y, obstacle.position.x, obstacle.position.y);
+    if (d < desiredSeparation + max(obstacle.width, obstacle.height) / 2) {
+      diff.normalize();
+      diff.div(d); // 障害物に近いほど強く反発
+      steer.add(diff);
     }
+    steer.normalize();
+    steer.mult(maxspeed);
+    steer.limit(maxforce * 3);
+    applyForce(steer);
   }
+}
 
+      // Boidクラスのrenderメソッドの一部を修正
   void render() {
-    float theta = velocity.heading2D() + radians(90);
-    fill(isZombie ? color(0, 255, 0) : color(0, 0, 255), 100);
-    stroke(255);
-    pushMatrix();
-    translate(position.x, position.y);
-    rotate(theta);
-    beginShape(TRIANGLES);
-    vertex(0, -r * 2);
-    vertex(-r, r * 2);
-    vertex(r, r * 2);
-    endShape();
-    popMatrix();
+    fill(isZombie ? color(255, 0, 0) : color(0, 0, 255), 100); // ゾンビは赤、サバイバーは青で描画
+    stroke(255); // 白い枠線を設定
+    pushMatrix(); // 現在の描画状態を保存
+    translate(position.x, position.y); // ボイドの位置に移動
+    // 三角形から円に変更
+    ellipse(0, 0, r * 2, r * 2); // 半径rの円を描画 (r * 2は直径)
+    popMatrix(); // 保存した描画状態を復元
   }
 
   void borders() {
@@ -213,6 +220,8 @@ class Boid {
 
   // chaseSurvivors()メソッドを修正
   void chaseSurvivors(ArrayList<Boid> boids) {
+    
+    //追いかけるサバイバーを探索
     Boid closestSurvivor = null;
     float minDist = seekRange;
     for (Boid other : boids) {
@@ -229,12 +238,15 @@ class Boid {
       applyForce(chaseForce);
       if (minDist < r*2) {
         closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
-        float x=maxspeed/topSpeed;
-        float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
-        print(rogistic+"\n");
-        if(rogistic > topSpeed){ 
-          topSpeed = rogistic;
-        }
+        //float x=maxspeed/topSpeed;
+        //float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
+        //print(rogistic+"\n");
+        //if(rogistic > topSpeed){ 
+        //  topSpeed = rogistic;
+        //}
+        
+        float rogistic=maxspeed; //仮
+        
         closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
         closestSurvivor.maxforce = rogistic*initialMaxForce; // 新しいゾンビの操舵力を設定
         
@@ -272,17 +284,20 @@ class Boid {
 
 class Obstacle {
   PVector position;
-  float size;
+  float width;
+  float height;
 
-  Obstacle(PVector pos, float s) {
+  Obstacle(PVector pos, float w, float h) {
     position = pos;
-    size = s;
+    width = w;
+    height = h;
   }
 
   void display() {
-    fill(255, 0, 0);
+    fill(0, 0, 0);
     noStroke();
-    ellipse(position.x, position.y, size, size);
+    rectMode(CENTER);
+    rect(position.x, position.y, width, height);
   }
 }
 
@@ -324,7 +339,7 @@ void setup() {
   // 障害物の生成と配置
   generateObstacles();
   
-  fullScreen();
+  //fullScreen();
 }
 
 void draw() {
@@ -339,22 +354,24 @@ void generateObstacles() {
 
   while (obstacles.size() < numObstacles) {
     PVector pos = new PVector(random(width), random(height));
-    float size = random(50, 300);
+    float w = random(50, 300);
+    float h = random(50, 300);
     boolean valid = true;
-    
+
     // 障害物が他の障害物やエージェントと重ならないようにする
     for (Obstacle o : obstacles) {
-      if (PVector.dist(pos, o.position) < 100 + o.size / 2) { // 他の障害物との距離が100以上であること
+      if (PVector.dist(pos, o.position) < obstacleSpacing + max(o.width, o.height) / 2) {
         valid = false;
         break;
       }
     }
 
     if (valid) {
-      obstacles.add(new Obstacle(pos, size));
+      obstacles.add(new Obstacle(pos, w, h));
     }
   }
 }
+
 
 void drawObstacles() {
   for (Obstacle obstacle : obstacles) {
