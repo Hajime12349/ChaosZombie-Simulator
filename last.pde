@@ -15,6 +15,11 @@ int infectionCooldown = 60; // 感染後の停止時間(フレーム数
 // グローバル変数として間隔パラメータを追加
 float obstacleSpacing = 200.0; // 障害物間の最低間隔
 
+// フレームカウンターを追加
+int frameCounter = 0;
+
+int rogisticInterval=5;
+
 
 class Boid {
   PVector position;
@@ -27,7 +32,7 @@ class Boid {
   float desiredSeparation = 40.0f; // 障害物からの理想的な距離
   float rogisticParm=3.9f;
   Boolean isHalt=false;
-  int cooldownTime = infectionCooldown; // 感染後の停止時間(フレーム数)
+  int cooldownTime = infectionCooldown; // 感染後の停止時間(フレーム数
 
 
   // 初期設定用のパラメータ
@@ -38,7 +43,7 @@ class Boid {
     float angle = random(TWO_PI);
     velocity = new PVector(cos(angle), sin(angle));
     position = new PVector(x, y);
-    r = 8.0;
+    r = 10.0;
     this.isZombie = isZombie;
 
     if (isZombie) {
@@ -49,8 +54,7 @@ class Boid {
       maxforce = initialMaxForce;
     }
   }
-
-  // run()メソッドを修正
+  // Boidクラス内のrunメソッドを修正（変更部分のみ）
   void run(ArrayList<Boid> boids) {
     // 感染したボイドの停止処理
     if (infectedBoids.contains(this)) {
@@ -62,15 +66,15 @@ class Boid {
         isHalt=false;
       } 
     }
-    
+  
     if (!isHalt){
       // 通常の処理
       if (isZombie) {
         chaseSurvivors(boids); // ゾンビがサバイバーを追いかける
       } else {
         avoidZombies(boids); // サバイバーがゾンビを避ける
+        flock(boids); // サバイバー同士で群れのルールに従う
       }
-      flock(boids); // 群れのルールに従う
       avoidObstacles(obstacles); // 障害物を避ける力を適用
       update(); // ボイドの状態を更新
       borders(); // 画面端での処理を行う
@@ -105,37 +109,40 @@ class Boid {
     PVector desired = PVector.sub(target, position);
     desired.normalize();
     desired.mult(maxspeed);
-    if(isZombie){
-      float x=maxspeed/topSpeed;
-      float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
-      maxspeed=rogistic;
-//print(maxforce+"\n");
+    
+    // 10フレームごとにロジスティック写像を適用
+    if (frameCounter % rogisticInterval == 0) {
+      if(isZombie){
+        float x=maxspeed/topSpeed;
+        float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
+        maxspeed=rogistic;
+      }
     }
+
     PVector steer = PVector.sub(desired, velocity);
     steer.limit(maxforce);
     return steer;
   }
 
   void avoidObstacles(ArrayList<Obstacle> obstacles) {
-  for (Obstacle obstacle : obstacles) {
-    PVector steer = new PVector(0, 0);
-    PVector diff = PVector.sub(position, obstacle.position);
-    float d = dist(position.x, position.y, obstacle.position.x, obstacle.position.y);
-    if (d < desiredSeparation + max(obstacle.width, obstacle.height) / 2) {
-      diff.normalize();
-      diff.div(d); // 障害物に近いほど強く反発
-      steer.add(diff);
+    for (Obstacle obstacle : obstacles) {
+      PVector steer = new PVector(0, 0);
+      PVector diff = PVector.sub(position, obstacle.position);
+      float d = dist(position.x, position.y, obstacle.position.x, obstacle.position.y);
+      if (d < desiredSeparation + max(obstacle.width, obstacle.height) / 2) {
+        diff.normalize();
+        diff.div(d); // 障害物に近いほど強く反発
+        steer.add(diff);
+      }
+      steer.normalize();
+      steer.mult(maxspeed);
+      steer.limit(maxforce * 3);
+      applyForce(steer);
     }
-    steer.normalize();
-    steer.mult(maxspeed);
-    steer.limit(maxforce * 3);
-    applyForce(steer);
   }
-}
 
-      // Boidクラスのrenderメソッドの一部を修正
   void render() {
-    fill(isZombie ? color(255, 0, 0) : color(0, 0, 255), 100); // ゾンビは赤、サバイバーは青で描画
+    fill(isZombie ? color(0, 255, 0) : color(0, 0, 255), 100); // ゾンビは赤、サバイバーは青で描画
     stroke(255); // 白い枠線を設定
     pushMatrix(); // 現在の描画状態を保存
     translate(position.x, position.y); // ボイドの位置に移動
@@ -156,13 +163,15 @@ class Boid {
     PVector steer = new PVector(0, 0, 0);
     int count = 0;
     for (Boid other : boids) {
-      float d = PVector.dist(position, other.position);
-      if ((d > 0) && (d < desiredseparation)) {
-        PVector diff = PVector.sub(position, other.position);
-        diff.normalize();
-        diff.div(d);
-        steer.add(diff);
-        count++;
+      if(!other.isZombie){
+        float d = PVector.dist(position, other.position);
+        if ((d > 0) && (d < desiredseparation)) {
+          PVector diff = PVector.sub(position, other.position);
+          diff.normalize();
+          diff.div(d);
+          steer.add(diff);
+          count++;
+        }
       }
     }
     if (count > 0) {
@@ -183,10 +192,12 @@ class Boid {
     int count = 0;
     for (Boid other : boids) {
       float d = PVector.dist(position, other.position);
-      if ((d > 0) && (d < neighbordist)) {
-        sum.add(other.velocity);
-        count++;
-      }
+       if(!other.isZombie){
+          if ((d > 0) && (d < neighbordist)) {
+            sum.add(other.velocity);
+            count++;
+          }
+       }
     }
     if (count > 0) {
       sum.div((float)count);
@@ -206,12 +217,15 @@ class Boid {
     int count = 0;
     for (Boid other : boids) {
       float d = PVector.dist(position, other.position);
-      if ((d > 0) && (d < neighbordist)) {
-        sum.add(other.position);
-        count++;
-      }
+       if(!other.isZombie){
+          if ((d > 0) && (d < neighbordist)) {
+            sum.add(other.position);
+            count++;
+          }
+       }
     }
-    if (count > 0) {sum.div(count);
+    if (count > 0) {
+      sum.div(count);
       return seek(sum);
     } else {
       return new PVector(0, 0);
@@ -233,26 +247,24 @@ class Boid {
         }
       }
     }
-    if (closestSurvivor != null) {
-      PVector chaseForce = seek(closestSurvivor.position);
-      applyForce(chaseForce);
-      if (minDist < r*2) {
-        closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
-        //float x=maxspeed/topSpeed;
-        //float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
-        //print(rogistic+"\n");
-        //if(rogistic > topSpeed){ 
-        //  topSpeed = rogistic;
-        //}
-        
-        float rogistic=maxspeed; //仮
-        
-        closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
-        closestSurvivor.maxforce = rogistic*initialMaxForce; // 新しいゾンビの操舵力を設定
-        
-        // 感染したボイドをリストに追加
-        infectedBoids.add(this);
-        infectedBoids.add(closestSurvivor);
+    
+    // 10フレームごとにロジスティック写像を適用
+    if (frameCounter % 10 == 0) {
+      if (closestSurvivor != null) {
+        PVector chaseForce = seek(closestSurvivor.position);
+        applyForce(chaseForce);
+        if (minDist < r*2) {
+          closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
+
+          float rogistic = closestSurvivor.maxspeed; //仮
+          
+          closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
+          closestSurvivor.maxforce = rogistic*initialMaxForce; // 新しいゾンビの操舵力を設定
+          
+          // 感染したボイドをリストに追加
+          infectedBoids.add(this);
+          infectedBoids.add(closestSurvivor);
+        }
       }
     }
   }
@@ -346,7 +358,9 @@ void draw() {
   background(50);
   flock.run();
   drawObstacles();
-  //print(topSpeed);
+  
+  // フレームカウンターを更新
+  frameCounter++;
 }
 
 void generateObstacles() {
