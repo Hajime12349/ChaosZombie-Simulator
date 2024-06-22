@@ -10,7 +10,7 @@ int seekRange=3000;
 
 // 追加したフィールド
 ArrayList<Boid> infectedBoids = new ArrayList<Boid>(); // 感染したボイドのリスト
-int infectionCooldown = 60; // 感染後の停止時間(フレーム数
+int infectionCooldown = 120; // 感染後の停止時間(フレーム数
 
 // グローバル変数として間隔パラメータを追加
 float obstacleSpacing = 200.0; // 障害物間の最低間隔
@@ -248,23 +248,19 @@ class Boid {
       }
     }
     
-    // 10フレームごとにロジスティック写像を適用
-    if (frameCounter % 10 == 0) {
-      if (closestSurvivor != null) {
-        PVector chaseForce = seek(closestSurvivor.position);
-        applyForce(chaseForce);
-        if (minDist < r*2) {
-          closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
+     if (closestSurvivor != null) {
+      PVector chaseForce = seek(closestSurvivor.position);
+      applyForce(chaseForce);
+      if (minDist < r*2) {
+        closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
 
-          float rogistic = closestSurvivor.maxspeed; //仮
-          
-          closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
-          closestSurvivor.maxforce = rogistic*initialMaxForce; // 新しいゾンビの操舵力を設定
-          
-          // 感染したボイドをリストに追加
-          infectedBoids.add(this);
-          infectedBoids.add(closestSurvivor);
-        }
+        float rogistic = closestSurvivor.maxspeed; //仮
+        closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
+        closestSurvivor.maxforce = rogistic * initialMaxForce; // 新しいゾンビの操舵力を設定
+        
+        // 感染したボイドをリストに追加
+        infectedBoids.add(this);
+        infectedBoids.add(closestSurvivor);
       }
     }
   }
