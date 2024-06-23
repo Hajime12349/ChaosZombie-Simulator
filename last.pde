@@ -1,12 +1,12 @@
 PVector target; // 目標地点
 ArrayList<Obstacle> obstacles; // 障害物のリスト
 
-int initialZombie = 1;
-int initialSurviver = 100;
+int initialBoids=100;
+float initialZombieRatio=0.05f;
 float[] zombieSpeeds = {2}; // ゾンビの速度リスト
-float topSpeed=7;
+float topSpeed=4;
 float topForce=0.06;
-int seekRange=3000;
+int seekRange=10000;
 
 // 追加したフィールド
 ArrayList<Boid> infectedBoids = new ArrayList<Boid>(); // 感染したボイドのリスト
@@ -20,6 +20,8 @@ int frameCounter = 0;
 
 int rogisticInterval=5;
 
+int resDist=50;
+
 
 class Boid {
   PVector position;
@@ -32,7 +34,11 @@ class Boid {
   float desiredSeparation = 40.0f; // 障害物からの理想的な距離
   float rogisticParm=3.9f;
   Boolean isHalt=false;
+  Boid targetBoid;
+  Boid targetRes;
   int cooldownTime = infectionCooldown; // 感染後の停止時間(フレーム数
+  color c;
+  float x;
 
 
   // 初期設定用のパラメータ
@@ -47,9 +53,11 @@ class Boid {
     this.isZombie = isZombie;
 
     if (isZombie) {
+      c=color(0,255,0);
       maxspeed = speed;
       maxforce = speed * initialMaxForce;
     } else {
+      c=color(0,0,255); 
       maxspeed = speed;
       maxforce = initialMaxForce;
     }
@@ -58,20 +66,71 @@ class Boid {
   void run(ArrayList<Boid> boids) {
     // 感染したボイドの停止処理
     if (infectedBoids.contains(this)) {
-      isHalt=true;
+      isHalt = true;
       cooldownTime--;
       if (cooldownTime <= 0) {
         infectedBoids.remove(this);
-        cooldownTime=infectionCooldown; // 感染クールダウンをリセット
-        isHalt=false;
-      } 
+        cooldownTime = infectionCooldown; // 感染クールダウンをリセット
+        this.isZombie = true; // サバイバーがゾンビに変わる
+
+        float rogistic = this.maxspeed; //仮
+        this.maxspeed = rogistic; // 新しいゾンビの速度を設定
+        this.maxforce = rogistic * initialMaxForce; // 新しいゾンビの操舵力を設定
+        
+        c=color(0,255,0);
+
+        
+        isHalt = false;
+      }
+      
+      if(isZombie&&targetBoid!=null){
+        //print(targetBoid);
+        for (Boid other : boids) {
+          if (other!=targetBoid && !other.isZombie && PVector.dist(targetBoid.position, other.position) < resDist) {
+            other.targetBoid = this;
+            other.targetRes=targetBoid;
+          }
+        }
+      }
     }
   
+    if (isHalt && isZombie) {
+      // サバイバーが救出に来た場合
+      for (Boid other : boids) {
+        if (other != targetBoid && !other.isZombie && PVector.dist(position, other.position) < r*2) {
+          // 感染せずに救出
+          cooldownTime = infectionCooldown; // 感染クールダウンをリセット
+          c=color(0, 0, 0);
+          infectedBoids.remove(targetBoid);
+          targetBoid.isHalt=false;
+          
+        }
+      }
+    }
     if (!isHalt){
       // 通常の処理
       if (isZombie) {
         chaseSurvivors(boids); // ゾンビがサバイバーを追いかける
-      } else {
+        
+        // フレームカウンターを更新
+        frameCounter++;
+        
+        // 10フレームごとにロジスティック写像を適用
+        if (frameCounter % rogisticInterval == 0) {
+          float x=maxspeed/topSpeed;
+          float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
+          maxspeed=rogistic;
+        }
+      } 
+      else if(targetBoid!=null){
+        if(infectedBoids.contains(targetRes)){
+          chaseZombies();
+        }
+        else{
+          targetBoid=null;
+        }
+      }
+      else{
         avoidZombies(boids); // サバイバーがゾンビを避ける
         flock(boids); // サバイバー同士で群れのルールに従う
       }
@@ -105,19 +164,11 @@ class Boid {
     acceleration.mult(0);
   }
 
-  PVector seek(PVector target) {
-    PVector desired = PVector.sub(target, position);
+  PVector seek(PVector targetVec) {
+    PVector desired = PVector.sub(targetVec, position);
     desired.normalize();
     desired.mult(maxspeed);
     
-    // 10フレームごとにロジスティック写像を適用
-    if (frameCounter % rogisticInterval == 0) {
-      if(isZombie){
-        float x=maxspeed/topSpeed;
-        float rogistic=topSpeed*(rogisticParm * x*(1-x)); //ロジスティク写像
-        maxspeed=rogistic;
-      }
-    }
 
     PVector steer = PVector.sub(desired, velocity);
     steer.limit(maxforce);
@@ -142,7 +193,7 @@ class Boid {
   }
 
   void render() {
-    fill(isZombie ? color(0, 255, 0) : color(0, 0, 255), 100); // ゾンビは赤、サバイバーは青で描画
+    fill(c, 100); // ゾンビは赤、サバイバーは青で描画
     stroke(255); // 白い枠線を設定
     pushMatrix(); // 現在の描画状態を保存
     translate(position.x, position.y); // ボイドの位置に移動
@@ -239,7 +290,7 @@ class Boid {
     Boid closestSurvivor = null;
     float minDist = seekRange;
     for (Boid other : boids) {
-      if (!other.isZombie) {
+      if (!other.isZombie && !other.isHalt) {
         float d = PVector.dist(position, other.position);
         if (d < minDist) {
           minDist = d;
@@ -249,21 +300,24 @@ class Boid {
     }
     
      if (closestSurvivor != null) {
-      PVector chaseForce = seek(closestSurvivor.position);
-      applyForce(chaseForce);
-      if (minDist < r*2) {
-        closestSurvivor.isZombie = true; // サバイバーがゾンビに変わる
-
-        float rogistic = closestSurvivor.maxspeed; //仮
-        closestSurvivor.maxspeed = rogistic; // 新しいゾンビの速度を設定
-        closestSurvivor.maxforce = rogistic * initialMaxForce; // 新しいゾンビの操舵力を設定
-        
-        // 感染したボイドをリストに追加
-        infectedBoids.add(this);
-        infectedBoids.add(closestSurvivor);
+        PVector chaseForce = seek(closestSurvivor.position);
+        targetBoid=closestSurvivor;
+        applyForce(chaseForce);
+        if (minDist < r*2) {
+          // 感染したボイドをリストに追加
+          infectedBoids.add(this);
+          infectedBoids.add(closestSurvivor);
+          
+        }
       }
     }
-  }
+  
+  
+  void chaseZombies() {
+     PVector chaseForce = seek(targetBoid.position);
+     applyForce(chaseForce);
+      
+    }
 
   void avoidZombies(ArrayList<Boid> boids) {
     PVector avoidForce = new PVector(0, 0);
@@ -335,11 +389,11 @@ void setup() {
   obstacles = new ArrayList<Obstacle>();
   target = new PVector(width / 2, height / 2);
 
-  // 初期設定のゾンビの速度と力
-  for (int i = 0; i < initialSurviver; i++) {
+  int numZombie=int(initialBoids*initialZombieRatio);
+  for (int i = 0; i < initialBoids-numZombie; i++) {
     flock.addBoid(new Boid(random(width), random(height), false, 1.5f)); // サバイバーを追加
   }
-  for (int i = 0; i < initialZombie; i++) {
+  for (int i = 0; i < numZombie; i++) {
     float speed = zombieSpeeds[int(random(zombieSpeeds.length))];
     flock.addBoid(new Boid(random(width), random(height), true, speed)); // ゾンビを追加
   }
@@ -355,8 +409,6 @@ void draw() {
   flock.run();
   drawObstacles();
   
-  // フレームカウンターを更新
-  frameCounter++;
 }
 
 void generateObstacles() {
