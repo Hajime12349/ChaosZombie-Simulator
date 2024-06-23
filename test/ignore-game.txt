@@ -2,15 +2,15 @@ PVector target; // 目標地点
 ArrayList<Obstacle> obstacles; // 障害物のリスト
 
 int initialBoids=100;
-float initialZombieRatio=0.05f;
+float initialZombieRatio=0.1f;
 float[] zombieSpeeds = {2}; // ゾンビの速度リスト
-float topSpeed=3.5f;
+float topSpeed=4f;
 float topForce=0.06f;
 int seekRange=10000;
 
 // 追加したフィールド
 ArrayList<Boid> infectedBoids = new ArrayList<Boid>(); // 感染したボイドのリスト
-int baseInfectionCooldown = 300; // 感染後の停止時間(フレーム数
+int baseInfectionCooldown = 150; // 感染後の停止時間(フレーム数
 
 // グローバル変数として間隔パラメータを追加
 float obstacleSpacing = 200.0; // 障害物間の最低間隔
@@ -18,7 +18,7 @@ float obstacleSpacing = 200.0; // 障害物間の最低間隔
 // フレームカウンターを追加
 int frameCounter = 0;
 
-int rogisticInterval=50;
+int rogisticInterval=10;
 
 int resDist=50;
 
@@ -90,19 +90,7 @@ class Boid {
       }
     }
   
-    if (isHalt && isZombie) {
-      // サバイバーが救出に来た場合
-      for (Boid other : boids) {
-        if (other != targetBoid && !other.isZombie && PVector.dist(position, other.position) < r*2) {
-          // 感染せずに救出
-          cooldownTime = int(baseInfectionCooldown*rogitX); // 感染クールダウンをリセット
-          c=color(0, 0, 0);
-          infectedBoids.remove(targetBoid);
-          targetBoid.isHalt=false;
-          
-        }
-      }
-    }
+    
     if (!isHalt){
       // 通常の処理
       if (isZombie) {
@@ -125,17 +113,9 @@ class Boid {
           disturbance=pow(rogitX,2);
         }
       } 
-      else if(targetBoid!=null){
-        if(infectedBoids.contains(targetRes)){
-          chaseZombies();
-        }
-        else{
-          targetBoid=null;
-        }
-      }
       else{
         avoidZombies(boids); // サバイバーがゾンビを避ける
-        flock(boids); // サバイバー同士で群れのルールに従う
+        //flock(boids); // サバイバー同士で群れのルールに従う
       }
       avoidObstacles(obstacles); // 障害物を避ける力を適用
       update(); // ボイドの状態を更新
@@ -417,12 +397,13 @@ void draw() {
   flock.run();
   drawObstacles();
   
-  // タイマーの表示
+   // タイマーの表示
   fill(255);
   textSize(32);
   textAlign(RIGHT, TOP);
   int seconds = millis()/1000;
   text("Time: " + seconds + " s", width - 20, 20);
+  
   
 }
 
